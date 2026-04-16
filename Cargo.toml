@@ -1,0 +1,25 @@
+[package]
+name = "hardware-info"
+version = "0.1.0"
+edition = "2021"
+description = "A small Rust library for collecting hardware information."
+license = "MIT OR Apache-2.0"
+repository = ""
+
+[dependencies]
+display-info = "0.5"
+num_cpus = "1"
+nvml-wrapper = "0.10"
+serde = { version = "1", features = ["derive"] }
+sysinfo = "0.30"
+
+[target.'cfg(windows)'.dependencies]
+smbios-lib = "0.9"
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_System_SystemInformation",
+] }
+wmi = "0.13"
