@@ -10,7 +10,7 @@ pub mod display;
 pub mod gpu;
 pub mod memory;
 pub mod motherboard;
-pub mod os;
+mod smbios;
 pub mod storage;
 
 use serde::{Deserialize, Serialize};
@@ -21,14 +21,12 @@ pub use display::{get_display, DisplayInfo};
 pub use gpu::{get_gpu, GpuInfo};
 pub use memory::{get_memory_info, MemoryInfo};
 pub use motherboard::{get_motherboard_info, MotherboardInfo};
-pub use os::{get_os_info, OsInfo};
 pub use storage::{get_storage, DiskInfo};
 
 pub type HwResult<T> = std::result::Result<T, String>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HardWareInfo {
-    pub os: Option<OsInfo>,
     pub bios: Option<BiosInfo>,
     pub motherboard: Option<MotherboardInfo>,
     pub cpu: Option<CpuInfo>,
@@ -49,7 +47,6 @@ pub struct CollectionError {
 pub fn get_hw_info() -> HardWareInfo {
     let mut errors = Vec::new();
 
-    let os = collect_optional("os", get_os_info(), &mut errors);
     let bios = collect_optional("bios", get_bios_info(), &mut errors);
     let motherboard = collect_optional("motherboard", get_motherboard_info(), &mut errors);
     let cpu = collect_optional("cpu", get_cpu_info(), &mut errors);
@@ -59,7 +56,6 @@ pub fn get_hw_info() -> HardWareInfo {
     let display = collect_list("display", get_display(), &mut errors);
 
     HardWareInfo {
-        os,
         bios,
         motherboard,
         cpu,

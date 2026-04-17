@@ -1,16 +1,10 @@
-use std::thread;
-
 use serde::{Deserialize, Serialize};
 
-use super::HwResult;
+use super::{
+    smbios::{join_non_empty, parse_smbios_structures, read_raw_smbios_table, smbios_table_bytes},
+    HwResult,
+};
 
-/// Represents the BIOS information of the current system.
-///
-/// This struct is used to store and serialize the BIOS-related data retrieved from the system.
-/// It contains the following fields:
-/// - uuid: A string representing the unique identifier for the BIOS.
-/// - manufacturer: A string representing the name of the BIOS manufacturer.
-/// - name: A string containing the version and release date of the BIOS.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BiosInfo {
     pub uuid: String,
@@ -18,53 +12,75 @@ pub struct BiosInfo {
     pub name: String,
 }
 
-/// Represents the raw BIOS information retrieved from the WMI query.
-///
-/// This struct corresponds to the Win32_BIOS class in Windows Management Instrumentation (WMI).
-/// It contains fields that represent various properties of the BIOS, including:
-/// - SerialNumber: The serial number of the BIOS.
-/// - Manufacturer: The manufacturer of the BIOS.
-/// - Version: The version of the BIOS.
-/// - ReleaseDate: The release date of the BIOS.
-#[allow(non_snake_case, non_camel_case_types)]
-#[derive(Deserialize, Debug)]
-struct Win32_BIOS {
-    pub SerialNumber: String,
-    pub Manufacturer: String,
-    pub Version: String,
-    pub ReleaseDate: String,
-}
-
-/// Retrieves the BIOS information of the current system.
-///
-/// This function is designed to work on Windows systems and uses the `wmi` crate to interact with
-/// the Windows Management Instrumentation (WMI). It spawns a new thread to perform the WMI query
-/// and then collects the results.
-///
-/// # Returns
-///
-/// Returns a `BiosInfo` struct containing the following fields:
-/// - `uuid`: A string representing the BIOS UUID.
-/// - `manufacturer`: A string representing the BIOS manufacturer.
-/// - `name`: A string representing the BIOS version and release date.
 #[cfg(target_os = "windows")]
 pub fn get_bios_info() -> HwResult<BiosInfo> {
-    use wmi::*;
-    thread::spawn(|| {
-        let wmi_con = WMIConnection::new(COMLibrary::new().map_err(|error| error.to_string())?)
-            .map_err(|error| error.to_string())?;
+    let smbios = read_raw_smbios_table()?;
+    parse_bios_info_from_smbios(&smbios)
+}
 
-        let results: Vec<Win32_BIOS> = wmi_con.query().map_err(|error| error.to_string())?;
-        let win32_bios = results
-            .first()
-            .ok_or_else(|| "WMI Win32_BIOS returned no records".to_string())?;
+#[cfg(not(target_os = "windows"))]
+pub fn get_bios_info() -> HwResult<BiosInfo> {
+    Err("BIOS collection is only implemented on Windows".to_string())
+}
 
-        Ok(BiosInfo {
-            uuid: win32_bios.SerialNumber.clone(),
-            manufacturer: win32_bios.Manufacturer.clone(),
-            name: format!("{} {}", win32_bios.Version, win32_bios.ReleaseDate),
-        })
+#[cfg(target_os = "windows")]
+fn parse_bios_info_from_smbios(raw_smbios: &[u8]) -> HwResult<BiosInfo> {
+    let table = smbios_table_bytes(raw_smbios)?;
+    let structures = parse_smbios_structures(table);
+
+    let bios = structures
+        .iter()
+        .find(|structure| structure.structure_type == 0)
+        .ok_or_else(|| "SMBIOS type 0 BIOS Information was not found".to_string())?;
+
+    let vendor = bios
+        .string_at(bios.formatted_byte(4).unwrap_or_default())
+        .ok_or_else(|| "SMBIOS BIOS vendor is missing".to_string())?;
+    let version = bios
+        .string_at(bios.formatted_byte(5).unwrap_or_default())
+        .unwrap_or_default();
+    let release_date = bios
+        .string_at(bios.formatted_byte(8).unwrap_or_default())
+        .unwrap_or_default();
+    let uuid = structures
+        .iter()
+        .find(|structure| structure.structure_type == 1)
+        .and_then(|structure| structure.uuid())
+        .unwrap_or_default();
+
+    Ok(BiosInfo {
+        uuid,
+        manufacturer: vendor,
+        name: join_non_empty(&[version, release_date]),
     })
-    .join()
-    .map_err(|_| "BIOS collector thread panicked".to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn parses_bios_and_system_uuid_from_smbios() {
+        let mut table = Vec::new();
+        table.extend_from_slice(&[0x00, 0x09, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x03]);
+        table.extend_from_slice(b"American Megatrends International, LLC.\0");
+        table.extend_from_slice(b"ALASKA - 1072009\0");
+        table.extend_from_slice(b"08/08/2024\0\0");
+        table.extend_from_slice(&[
+            0x01, 0x19, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x67, 0x45, 0x23, 0x01, 0xab, 0x89,
+            0xef, 0xcd, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x00,
+        ]);
+        table.extend_from_slice(b"\0\0");
+
+        let mut raw_smbios = vec![0, 3, 4, 0];
+        raw_smbios.extend_from_slice(&(table.len() as u32).to_le_bytes());
+        raw_smbios.extend_from_slice(&table);
+
+        let bios = parse_bios_info_from_smbios(&raw_smbios).unwrap();
+
+        assert_eq!(bios.manufacturer, "American Megatrends International, LLC.");
+        assert_eq!(bios.name, "ALASKA - 1072009 08/08/2024");
+        assert_eq!(bios.uuid, "01234567-89ab-cdef-0123-456789abcdef");
+    }
 }

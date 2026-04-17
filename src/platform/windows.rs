@@ -23,6 +23,10 @@ pub(crate) fn collect() -> Result<HardwareInfo> {
     })
 }
 
+pub(crate) fn collect_os_info() -> Result<OsInfo> {
+    Ok(collect_os())
+}
+
 fn collect_os() -> OsInfo {
     OsInfo {
         family: std::env::consts::FAMILY.to_string(),
