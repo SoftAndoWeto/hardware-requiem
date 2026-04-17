@@ -16,3 +16,8 @@ pub use types::{CpuArchitecture, CpuInfo, DiskInfo, DiskKind, HardwareInfo, Memo
 pub fn get_hardware_info() -> Result<HardwareInfo> {
     platform::collect()
 }
+
+/// Collects operating system information only.
+pub fn get_os_info() -> Result<OsInfo> {
+    platform::collect_os_info()
+}
