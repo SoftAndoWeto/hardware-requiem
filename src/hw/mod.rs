@@ -11,6 +11,7 @@ pub mod gpu;
 pub mod memory;
 pub mod motherboard;
 pub mod os;
+mod smbios;
 pub mod storage;
 
 use serde::{Deserialize, Serialize};
