@@ -152,3 +152,6 @@ pub fn join_non_empty(values: &[String]) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
+
+#[cfg(test)]
+mod tests;
