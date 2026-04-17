@@ -294,3 +294,6 @@ impl Drop for OwnedHandle {
         let _ = unsafe { CloseHandle(self.0) };
     }
 }
+
+#[cfg(test)]
+mod tests;
