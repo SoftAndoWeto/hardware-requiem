@@ -50,6 +50,16 @@ impl SmbiosStructure {
         self.formatted.get(offset).copied()
     }
 
+    pub fn formatted_word(&self, offset: usize) -> Option<u16> {
+        let bytes = self.formatted.get(offset..offset + 2)?;
+        Some(u16::from_le_bytes([bytes[0], bytes[1]]))
+    }
+
+    pub fn formatted_dword(&self, offset: usize) -> Option<u32> {
+        let bytes = self.formatted.get(offset..offset + 4)?;
+        Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+
     pub fn string_at(&self, index: u8) -> Option<String> {
         if index == 0 {
             return None;
