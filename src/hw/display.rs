@@ -148,7 +148,8 @@ struct EdidInfo {
 fn collect_active_monitors() -> Vec<ActiveMonitor> {
     use windows::core::PCWSTR;
     use windows::Win32::Graphics::Gdi::{
-        EnumDisplayDevicesW, DISPLAY_DEVICEW, DISPLAY_DEVICE_ACTIVE, DISPLAY_DEVICE_PRIMARY_DEVICE,
+        DISPLAY_DEVICE_STATE_FLAGS, DISPLAY_DEVICEW, DISPLAY_DEVICE_ACTIVE,
+        DISPLAY_DEVICE_PRIMARY_DEVICE, EnumDisplayDevicesW,
     };
     use windows::Win32::UI::WindowsAndMessaging::EDD_GET_DEVICE_INTERFACE_NAME;
 
@@ -169,7 +170,8 @@ fn collect_active_monitors() -> Vec<ActiveMonitor> {
         let adapter_name = utf16_null_terminated_to_string(&adapter.DeviceName);
         let adapter_device_name = wide_null_terminated(&adapter_name);
         let adapter_display_name = utf16_null_terminated_to_string(&adapter.DeviceString);
-        let is_primary = (adapter.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) != 0;
+        let is_primary = (adapter.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE)
+            != DISPLAY_DEVICE_STATE_FLAGS(0);
         let settings = display_settings(&adapter_name);
         let mut monitor_index = 0;
 
@@ -191,7 +193,7 @@ fn collect_active_monitors() -> Vec<ActiveMonitor> {
                 break;
             }
 
-            if (monitor.StateFlags & DISPLAY_DEVICE_ACTIVE) != 0 {
+            if (monitor.StateFlags & DISPLAY_DEVICE_ACTIVE) != DISPLAY_DEVICE_STATE_FLAGS(0) {
                 let device_id = utf16_null_terminated_to_string(&monitor.DeviceID);
                 let hardware_id = monitor_hardware_id(&device_id);
                 let name = utf16_null_terminated_to_string(&monitor.DeviceString);
@@ -372,7 +374,7 @@ impl RegKey {
             RegOpenKeyExW(
                 HKEY_LOCAL_MACHINE,
                 PCWSTR(path.as_ptr()),
-                0,
+                Some(0),
                 KEY_READ,
                 &mut key,
             )
@@ -394,7 +396,9 @@ impl RegKey {
 
         let mut key = HKEY::default();
         let path = wide_null_terminated(path);
-        let status = unsafe { RegOpenKeyExW(self.0, PCWSTR(path.as_ptr()), 0, KEY_READ, &mut key) };
+        let status = unsafe {
+            RegOpenKeyExW(self.0, PCWSTR(path.as_ptr()), Some(0), KEY_READ, &mut key)
+        };
 
         if status.is_ok() {
             Ok(Self(key))
@@ -418,10 +422,10 @@ impl RegKey {
                 RegEnumKeyExW(
                     self.0,
                     index,
-                    PWSTR(buffer.as_mut_ptr()),
+                    Some(PWSTR(buffer.as_mut_ptr())),
                     &mut len,
                     None,
-                    PWSTR::null(),
+                    Some(PWSTR::null()),
                     None,
                     None,
                 )
