@@ -11,6 +11,12 @@ rust-version = "1.85"
 readme = "README.md"
 homepage = "https://github.com/SoftAndoWeto/hardware-requiem"
 
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
 [dependencies]
 nvml-wrapper = "0.10"
 serde = { version = "1", features = ["derive"] }
