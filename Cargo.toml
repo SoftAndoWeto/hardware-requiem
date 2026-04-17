@@ -15,7 +15,6 @@ serde = { version = "1", features = ["derive"] }
 sysinfo = "0.30"
 
 [target.'cfg(windows)'.dependencies]
-smbios-lib = "0.9"
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",

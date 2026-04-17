@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
-use smbioslib::{table_load_from_device, SMBiosMemoryDevice};
 
 use super::HwResult;
+#[cfg(target_os = "windows")]
+use super::smbios::{parse_smbios_structures, read_raw_smbios_table, smbios_table_bytes};
 
 /// Represents information about a memory device in the system.
 ///
@@ -19,53 +20,112 @@ pub struct MemoryInfo {
     pub clock_speed: u16,
 }
 
-/// Retrieves a list of memory information from the system's SMBIOS tables.
-///
-/// This function is only available on Windows systems. It uses the `smbioslib` crate to parse the
-/// SMBIOS tables and extract relevant information about installed memory devices.
-///
-/// # Returns
-///
-/// A vector of `MemoryInfo` structs, each containing the following fields:
-/// - `memory_type`: A string representing the type of memory (e.g., "DDR4").
-/// - `capacity`: An unsigned 16-bit integer representing the memory capacity in megabytes.
-/// - `clock_speed`: An unsigned 16-bit integer representing the memory clock speed in megahertz.
+/// Retrieves a list of memory information from SMBIOS type 17 structures.
 #[cfg(target_os = "windows")]
 pub fn get_memory_info() -> HwResult<Vec<MemoryInfo>> {
-    let data = table_load_from_device().map_err(|error| error.to_string())?;
-    let mut mem_info_list = vec![];
+    let smbios = read_raw_smbios_table()?;
+    parse_memory_info_from_smbios(&smbios)
+}
 
-    for memory_device in data.collect::<SMBiosMemoryDevice>() {
-        let clock_speed = match memory_device.speed() {
-            Some(msd) => match msd {
-                smbioslib::MemorySpeed::Unknown => continue,
-                smbioslib::MemorySpeed::SeeExtendedSpeed => continue,
-                smbioslib::MemorySpeed::MTs(speed) => speed,
-            },
-            None => continue,
+#[cfg(not(target_os = "windows"))]
+pub fn get_memory_info() -> HwResult<Vec<MemoryInfo>> {
+    Err("memory collection is only implemented on Windows".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn parse_memory_info_from_smbios(raw_smbios: &[u8]) -> HwResult<Vec<MemoryInfo>> {
+    let table = smbios_table_bytes(raw_smbios)?;
+    let structures = parse_smbios_structures(table);
+    let mut memory = Vec::new();
+
+    for structure in structures.iter().filter(|structure| structure.structure_type == 17) {
+        let Some(size_mb) = memory_device_size_mb(structure) else {
+            continue;
         };
-
-        let size = match memory_device.size() {
-            Some(size) => match size {
-                smbioslib::MemorySize::NotInstalled => continue,
-                smbioslib::MemorySize::Unknown => continue,
-                smbioslib::MemorySize::SeeExtendedSize => continue,
-                smbioslib::MemorySize::Kilobytes(kb_size) => kb_size / 1024,
-                smbioslib::MemorySize::Megabytes(mb_size) => mb_size,
-            },
-            None => continue,
+        let Some(clock_speed) = memory_device_speed_mts(structure) else {
+            continue;
         };
-
-        let memory_type = match memory_device.memory_type() {
-            Some(memory_type) => format!("{:?}", memory_type.value),
-            None => continue,
+        let Some(capacity) = u16::try_from(size_mb).ok() else {
+            continue;
         };
+        let memory_type = memory_type_name(structure.formatted_byte(0x12).unwrap_or_default());
 
-        mem_info_list.push(MemoryInfo {
+        memory.push(MemoryInfo {
             memory_type,
-            capacity: size,
+            capacity,
             clock_speed,
         });
     }
-    Ok(mem_info_list)
+
+    Ok(memory)
 }
+
+#[cfg(target_os = "windows")]
+fn memory_device_size_mb(structure: &super::smbios::SmbiosStructure) -> Option<u32> {
+    match structure.formatted_word(0x0c)? {
+        0 | 0xffff => None,
+        0x7fff => {
+            let size = structure.formatted_dword(0x1c)?;
+            if size == 0 { None } else { Some(size) }
+        }
+        size if size & 0x8000 != 0 => {
+            let kb_size = (size & 0x7fff) as u32;
+            if kb_size == 0 {
+                None
+            } else {
+                Some(kb_size / 1024)
+            }
+        }
+        size => Some(size as u32),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn memory_device_speed_mts(structure: &super::smbios::SmbiosStructure) -> Option<u16> {
+    let speed = structure.formatted_word(0x15)?;
+
+    match speed {
+        0 => None,
+        0xffff => {
+            let extended_speed = structure.formatted_dword(0x54)?;
+            u16::try_from(extended_speed).ok().filter(|value| *value > 0)
+        }
+        value => Some(value),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn memory_type_name(code: u8) -> String {
+    let name = match code {
+        0x01 => "Other",
+        0x02 => "Unknown",
+        0x03 => "DRAM",
+        0x04 => "EDRAM",
+        0x05 => "VRAM",
+        0x06 => "SRAM",
+        0x07 => "RAM",
+        0x08 => "ROM",
+        0x09 => "FLASH",
+        0x0f => "SDRAM",
+        0x12 => "DDR",
+        0x13 => "DDR2",
+        0x18 => "DDR3",
+        0x1a => "DDR4",
+        0x1b => "LPDDR",
+        0x1c => "LPDDR2",
+        0x1d => "LPDDR3",
+        0x1e => "LPDDR4",
+        0x1f => "Logical Non-Volatile Device",
+        0x20 => "HBM",
+        0x21 => "HBM2",
+        0x22 => "DDR5",
+        0x23 => "LPDDR5",
+        _ => return format!("Unknown (0x{code:02X})"),
+    };
+
+    name.to_string()
+}
+
+#[cfg(test)]
+#[path = "memory/tests.rs"]
+mod tests;
