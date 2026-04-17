@@ -1,0 +1,45 @@
+use super::*;
+
+#[test]
+#[cfg(target_os = "windows")]
+fn parses_installed_memory_devices() {
+    let mut table = Vec::new();
+
+    // Type 17: 16 GB DDR4 @ 3200 MT/s
+    table.extend_from_slice(&[
+        0x11, 0x17, 0x00, 0x00, // header
+        0x00, 0x00, 0x00, 0x00, // offsets 0x04..0x07
+        0x00, 0x00, 0x00, 0x00, // offsets 0x08..0x0B
+        0x00, 0x40, // size (0x0C): 16384 MB
+        0x00, 0x00, // offsets 0x0E..0x0F
+        0x00, 0x00, // offsets 0x10..0x11
+        0x1a, // memory type (0x12): DDR4
+        0x00, 0x00, // offsets 0x13..0x14
+        0x80, 0x0c, // speed (0x15): 3200 MT/s
+    ]);
+    table.extend_from_slice(&[0x00, 0x00]);
+
+    // Type 17: empty slot (size=0), should be ignored
+    table.extend_from_slice(&[
+        0x11, 0x17, 0x01, 0x00, // header
+        0x00, 0x00, 0x00, 0x00, // offsets 0x04..0x07
+        0x00, 0x00, 0x00, 0x00, // offsets 0x08..0x0B
+        0x00, 0x00, // size (0x0C): not installed
+        0x00, 0x00, // offsets 0x0E..0x0F
+        0x00, 0x00, // offsets 0x10..0x11
+        0x1a, // memory type
+        0x00, 0x00, // offsets 0x13..0x14
+        0x00, 0x00, // speed: unknown
+    ]);
+    table.extend_from_slice(&[0x00, 0x00]);
+
+    let mut raw_smbios = vec![0, 3, 4, 0];
+    raw_smbios.extend_from_slice(&(table.len() as u32).to_le_bytes());
+    raw_smbios.extend_from_slice(&table);
+
+    let memory = parse_memory_info_from_smbios(&raw_smbios).unwrap();
+    assert_eq!(memory.len(), 1);
+    assert_eq!(memory[0].memory_type, "DDR4");
+    assert_eq!(memory[0].capacity, 16_384);
+    assert_eq!(memory[0].clock_speed, 3_200);
+}
