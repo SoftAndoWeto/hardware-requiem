@@ -2,11 +2,12 @@ use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 
 use windows::core::PCWSTR;
+use windows::Wdk::System::SystemServices::RtlGetVersion;
 use windows::Win32::Storage::FileSystem::{GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives};
 use windows::Win32::System::SystemInformation::{
-    GetNativeSystemInfo, GlobalMemoryStatusEx, MEMORYSTATUSEX, PROCESSOR_ARCHITECTURE,
-    PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_ARM, PROCESSOR_ARCHITECTURE_ARM64,
-    PROCESSOR_ARCHITECTURE_INTEL, SYSTEM_INFO,
+    GetNativeSystemInfo, GlobalMemoryStatusEx, MEMORYSTATUSEX, OSVERSIONINFOW,
+    PROCESSOR_ARCHITECTURE, PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_ARM,
+    PROCESSOR_ARCHITECTURE_ARM64, PROCESSOR_ARCHITECTURE_INTEL, SYSTEM_INFO,
 };
 
 use crate::{
@@ -31,7 +32,30 @@ fn collect_os() -> OsInfo {
     OsInfo {
         family: std::env::consts::FAMILY.to_string(),
         name: Some("Windows".to_string()),
-        version: std::env::var("OS").ok(),
+        version: windows_major_version(),
+    }
+}
+
+fn windows_major_version() -> Option<String> {
+    let mut version_info = OSVERSIONINFOW {
+        dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32,
+        ..Default::default()
+    };
+
+    let status = unsafe { RtlGetVersion(&mut version_info) };
+    if !status.is_ok() {
+        return None;
+    }
+
+    let major = version_info.dwMajorVersion;
+    let build = version_info.dwBuildNumber;
+
+    if major == 10 && build >= 22_000 {
+        Some("11".to_string())
+    } else if major == 10 {
+        Some("10".to_string())
+    } else {
+        Some(major.to_string())
     }
 }
 
@@ -92,7 +116,7 @@ fn collect_disks() -> Result<Vec<DiskInfo>> {
     if mask == 0 {
         return Err(HardwareInfoError::WindowsApi {
             function: "GetLogicalDrives",
-            message: windows::core::Error::from_win32().message(),
+            message: windows::core::Error::from_thread().message(),
         });
     }
 

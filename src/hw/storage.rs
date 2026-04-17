@@ -101,7 +101,7 @@ fn open_physical_drive(path: &str, desired_access: u32) -> HwResult<Option<Owned
             None,
             OPEN_EXISTING,
             FILE_ATTRIBUTE_NORMAL,
-            HANDLE(std::ptr::null_mut()),
+            Some(HANDLE(std::ptr::null_mut())),
         )
     };
 
