@@ -9,7 +9,6 @@ authors = ["Ilya Karasev <iosdsbb@gmail.com>"]
 keywords = ["hardware", "cpu", "gpu", "bios", "ram"]
 
 [dependencies]
-display-info = "0.5"
 num_cpus = "1"
 nvml-wrapper = "0.10"
 serde = { version = "1", features = ["derive"] }
@@ -19,10 +18,13 @@ sysinfo = "0.30"
 smbios-lib = "0.9"
 windows = { version = "0.58", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_Graphics_Dxgi",
     "Win32_Storage_FileSystem",
     "Win32_System_IO",
     "Win32_System_Ioctl",
+    "Win32_System_Registry",
     "Win32_System_SystemInformation",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 wmi = "0.13"
