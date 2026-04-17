@@ -148,8 +148,8 @@ struct EdidInfo {
 fn collect_active_monitors() -> Vec<ActiveMonitor> {
     use windows::core::PCWSTR;
     use windows::Win32::Graphics::Gdi::{
-        DISPLAY_DEVICE_STATE_FLAGS, DISPLAY_DEVICEW, DISPLAY_DEVICE_ACTIVE,
-        DISPLAY_DEVICE_PRIMARY_DEVICE, EnumDisplayDevicesW,
+        EnumDisplayDevicesW, DISPLAY_DEVICEW, DISPLAY_DEVICE_ACTIVE, DISPLAY_DEVICE_PRIMARY_DEVICE,
+        DISPLAY_DEVICE_STATE_FLAGS,
     };
     use windows::Win32::UI::WindowsAndMessaging::EDD_GET_DEVICE_INTERFACE_NAME;
 
@@ -170,8 +170,8 @@ fn collect_active_monitors() -> Vec<ActiveMonitor> {
         let adapter_name = utf16_null_terminated_to_string(&adapter.DeviceName);
         let adapter_device_name = wide_null_terminated(&adapter_name);
         let adapter_display_name = utf16_null_terminated_to_string(&adapter.DeviceString);
-        let is_primary = (adapter.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE)
-            != DISPLAY_DEVICE_STATE_FLAGS(0);
+        let is_primary =
+            (adapter.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) != DISPLAY_DEVICE_STATE_FLAGS(0);
         let settings = display_settings(&adapter_name);
         let mut monitor_index = 0;
 
@@ -396,9 +396,8 @@ impl RegKey {
 
         let mut key = HKEY::default();
         let path = wide_null_terminated(path);
-        let status = unsafe {
-            RegOpenKeyExW(self.0, PCWSTR(path.as_ptr()), Some(0), KEY_READ, &mut key)
-        };
+        let status =
+            unsafe { RegOpenKeyExW(self.0, PCWSTR(path.as_ptr()), Some(0), KEY_READ, &mut key) };
 
         if status.is_ok() {
             Ok(Self(key))
@@ -685,33 +684,4 @@ fn wide_null_terminated(value: &str) -> Vec<u16> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[cfg(target_os = "windows")]
-    fn parses_edid_display_name() {
-        let mut edid = vec![0; 128];
-        edid[54..72].copy_from_slice(&[
-            0x00, 0x00, 0x00, 0xfc, 0x00, b'O', b'd', b'y', b's', b's', b'e', b'y', b' ', b'G',
-            b'5', b'2', b'A', 0x0a,
-        ]);
-
-        assert_eq!(edid_display_name(&edid), Some("Odyssey G52A".to_string()));
-    }
-
-    #[test]
-    #[cfg(target_os = "windows")]
-    fn parses_monitor_hardware_id() {
-        assert_eq!(
-            monitor_hardware_id(r"MONITOR\SAM71E7\{4d36e96e-e325-11ce-bfc1-08002be10318}"),
-            Some("SAM71E7".to_string())
-        );
-        assert_eq!(
-            monitor_hardware_id(
-                r"\\?\DISPLAY#SAM71E7#5&22264ea&1&UID4353#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}"
-            ),
-            Some("SAM71E7".to_string())
-        );
-    }
-}
+mod tests;
