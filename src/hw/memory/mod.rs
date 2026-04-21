@@ -1,17 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::HwResult;
-#[cfg(target_os = "windows")]
+#[cfg(any(windows, target_os = "linux"))]
 use super::smbios::{parse_smbios_structures, read_raw_smbios_table, smbios_table_bytes};
 
-/// Represents information about a memory device in the system.
-///
-/// This struct is used to store and serialize data related to an individual memory device
-/// as retrieved from the system's SMBIOS tables. It contains the following fields:
-/// - memory_type: A string representing the type of memory (e.g., "DDR4").
-/// - capacity: An unsigned 16-bit integer representing the memory capacity in megabytes.
-/// - clock_speed: An unsigned 16-bit integer representing the memory clock speed in megahertz.
-/// - vendor/manufacturer and module identifiers when SMBIOS provides them.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MemoryInfo {
     #[serde(rename = "type")]
@@ -31,25 +23,24 @@ pub struct MemoryInfo {
     pub bank_locator: Option<String>,
 }
 
-/// Retrieves a list of memory information from SMBIOS type 17 structures.
-#[cfg(target_os = "windows")]
+#[cfg(any(windows, target_os = "linux"))]
 pub fn get_memory_info() -> HwResult<Vec<MemoryInfo>> {
     let smbios = read_raw_smbios_table()?;
     parse_memory_info_from_smbios(&smbios)
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn get_memory_info() -> HwResult<Vec<MemoryInfo>> {
-    Err("memory collection is only implemented on Windows".to_string())
+    Err("memory collection is not implemented for this platform".to_string())
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(windows, target_os = "linux"))]
 fn parse_memory_info_from_smbios(raw_smbios: &[u8]) -> HwResult<Vec<MemoryInfo>> {
     let table = smbios_table_bytes(raw_smbios)?;
     let structures = parse_smbios_structures(table);
     let mut memory = Vec::new();
 
-    for structure in structures.iter().filter(|structure| structure.structure_type == 17) {
+    for structure in structures.iter().filter(|s| s.structure_type == 17) {
         let Some(size_mb) = memory_device_size_mb(structure) else {
             continue;
         };
@@ -88,7 +79,6 @@ fn parse_memory_info_from_smbios(raw_smbios: &[u8]) -> HwResult<Vec<MemoryInfo>>
     Ok(memory)
 }
 
-#[cfg(target_os = "windows")]
 fn memory_device_size_mb(structure: &super::smbios::SmbiosStructure) -> Option<u32> {
     match structure.formatted_word(0x0c)? {
         0 | 0xffff => None,
@@ -98,31 +88,23 @@ fn memory_device_size_mb(structure: &super::smbios::SmbiosStructure) -> Option<u
         }
         size if size & 0x8000 != 0 => {
             let kb_size = (size & 0x7fff) as u32;
-            if kb_size == 0 {
-                None
-            } else {
-                Some(kb_size / 1024)
-            }
+            if kb_size == 0 { None } else { Some(kb_size / 1024) }
         }
         size => Some(size as u32),
     }
 }
 
-#[cfg(target_os = "windows")]
 fn memory_device_speed_mts(structure: &super::smbios::SmbiosStructure) -> Option<u16> {
-    let speed = structure.formatted_word(0x15)?;
-
-    match speed {
+    match structure.formatted_word(0x15)? {
         0 => None,
         0xffff => {
             let extended_speed = structure.formatted_dword(0x54)?;
-            u16::try_from(extended_speed).ok().filter(|value| *value > 0)
+            u16::try_from(extended_speed).ok().filter(|v| *v > 0)
         }
         value => Some(value),
     }
 }
 
-#[cfg(target_os = "windows")]
 fn memory_type_name(code: u8) -> String {
     let name = match code {
         0x01 => "Other",
