@@ -1,7 +1,6 @@
 use super::*;
 
 #[test]
-#[cfg(target_os = "windows")]
 fn parses_bios_and_system_uuid_from_smbios() {
     let mut table = Vec::new();
     table.extend_from_slice(&[0x00, 0x09, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x03]);
@@ -14,9 +13,16 @@ fn parses_bios_and_system_uuid_from_smbios() {
     ]);
     table.extend_from_slice(b"\0\0");
 
-    let mut raw_smbios = vec![0, 3, 4, 0];
-    raw_smbios.extend_from_slice(&(table.len() as u32).to_le_bytes());
-    raw_smbios.extend_from_slice(&table);
+    #[cfg(windows)]
+    let raw_smbios = {
+        let mut raw = vec![0, 3, 4, 0];
+        raw.extend_from_slice(&(table.len() as u32).to_le_bytes());
+        raw.extend_from_slice(&table);
+        raw
+    };
+
+    #[cfg(target_os = "linux")]
+    let raw_smbios = table.clone();
 
     let bios = parse_bios_info_from_smbios(&raw_smbios).unwrap();
 
