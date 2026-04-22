@@ -1,7 +1,6 @@
-use super::*;
+use super::parser::parse_memory_devices;
 
 #[test]
-#[cfg(target_os = "windows")]
 fn parses_installed_memory_devices() {
     let mut table = Vec::new();
 
@@ -33,11 +32,7 @@ fn parses_installed_memory_devices() {
     ]);
     table.extend_from_slice(&[0x00, 0x00]);
 
-    let mut raw_smbios = vec![0, 3, 4, 0];
-    raw_smbios.extend_from_slice(&(table.len() as u32).to_le_bytes());
-    raw_smbios.extend_from_slice(&table);
-
-    let memory = parse_memory_info_from_smbios(&raw_smbios).unwrap();
+    let memory = parse_memory_devices(&table);
     assert_eq!(memory.len(), 1);
     assert_eq!(memory[0].memory_type, "DDR4");
     assert_eq!(memory[0].capacity, 16_384);
