@@ -1,6 +1,11 @@
+use serde::{Deserialize, Serialize};
+
+use super::HwResult;
+
+#[cfg(windows)]
 use std::{ffi::CString, ffi::OsStr, mem::size_of, os::windows::ffi::OsStrExt};
 
-use serde::{Deserialize, Serialize};
+#[cfg(windows)]
 use windows::{
     core::{PCSTR, PCWSTR},
     Win32::Foundation::{CloseHandle, HANDLE},
@@ -18,17 +23,7 @@ use windows::{
     },
 };
 
-use super::HwResult;
-
 /// Represents information about a storage device.
-///
-/// This struct is used to store and serialize data related to connected storage devices,
-/// such as hard drives, SSDs, and USB drives. It contains the following fields:
-///
-/// - name: A string representing the name of the storage device.
-/// - model: A string representing the model of the storage device.
-/// - serial_number: A string representing the serial number of the storage device.
-/// - size: A 64-bit unsigned integer representing the total size of the storage device in bytes.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DiskInfo {
     pub name: String,
@@ -39,10 +34,67 @@ pub struct DiskInfo {
 }
 
 /// Retrieves information about physical storage devices.
+#[cfg(windows)]
 pub fn get_storage() -> HwResult<Vec<DiskInfo>> {
     get_physical_storage()
 }
 
+#[cfg(target_os = "linux")]
+pub fn get_storage() -> HwResult<Vec<DiskInfo>> {
+    let mut disks: Vec<DiskInfo> = std::fs::read_dir("/sys/block")
+        .map_err(|e| format!("cannot read /sys/block: {e}"))?
+        .flatten()
+        .filter(|entry| entry.path().join("device").exists())
+        .map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let sys_path = entry.path();
+            let model =
+                read_sysfs_string(&sys_path.join("device/model")).unwrap_or_default();
+            let serial_number =
+                read_sysfs_string(&sys_path.join("device/serial")).unwrap_or_default();
+            let size = read_sysfs_u64(&sys_path.join("size"))
+                .map(sectors_to_bytes)
+                .unwrap_or(0);
+            DiskInfo {
+                name: format!("/dev/{name}"),
+                model,
+                serial_number,
+                size,
+            }
+        })
+        .collect();
+
+    if disks.is_empty() {
+        return Err("no physical drives were found".to_string());
+    }
+
+    disks.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(disks)
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+pub fn get_storage() -> HwResult<Vec<DiskInfo>> {
+    Err("storage collection is not implemented for this platform".to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn read_sysfs_string(path: &std::path::Path) -> Option<String> {
+    let value = std::fs::read_to_string(path).ok()?;
+    let trimmed = value.trim().to_string();
+    if trimmed.is_empty() { None } else { Some(trimmed) }
+}
+
+#[cfg(target_os = "linux")]
+fn read_sysfs_u64(path: &std::path::Path) -> Option<u64> {
+    read_sysfs_string(path)?.parse().ok()
+}
+
+#[cfg(target_os = "linux")]
+fn sectors_to_bytes(sectors: u64) -> u64 {
+    sectors.saturating_mul(512)
+}
+
+#[cfg(windows)]
 fn get_physical_storage() -> HwResult<Vec<DiskInfo>> {
     let mut disks = Vec::new();
     let mut errors = Vec::new();
@@ -66,6 +118,7 @@ fn get_physical_storage() -> HwResult<Vec<DiskInfo>> {
     }
 }
 
+#[cfg(windows)]
 fn query_physical_drive(index: u32) -> HwResult<Option<DiskInfo>> {
     let path = format!("\\\\.\\PhysicalDrive{index}");
     let handle = match open_physical_drive(&path, FILE_GENERIC_READ.0) {
@@ -90,6 +143,7 @@ fn query_physical_drive(index: u32) -> HwResult<Option<DiskInfo>> {
     }))
 }
 
+#[cfg(windows)]
 fn open_physical_drive(path: &str, desired_access: u32) -> HwResult<Option<OwnedHandle>> {
     let wide_path = wide_null(path);
 
@@ -118,6 +172,7 @@ fn open_physical_drive(path: &str, desired_access: u32) -> HwResult<Option<Owned
     }
 }
 
+#[cfg(windows)]
 fn query_storage_descriptor(handle: HANDLE) -> HwResult<Vec<u8>> {
     let query = STORAGE_PROPERTY_QUERY {
         PropertyId: StorageDeviceProperty,
@@ -150,10 +205,12 @@ fn query_storage_descriptor(handle: HANDLE) -> HwResult<Vec<u8>> {
     Ok(output)
 }
 
+#[cfg(windows)]
 fn query_drive_size(handle: HANDLE) -> HwResult<u64> {
     query_drive_length(handle).or_else(|_| query_drive_geometry_size(handle))
 }
 
+#[cfg(windows)]
 fn query_drive_length(handle: HANDLE) -> HwResult<u64> {
     let mut output = GET_LENGTH_INFORMATION::default();
     let mut bytes_returned = 0u32;
@@ -175,6 +232,7 @@ fn query_drive_length(handle: HANDLE) -> HwResult<u64> {
     Ok(output.Length.max(0) as u64)
 }
 
+#[cfg(windows)]
 fn query_drive_geometry_size(handle: HANDLE) -> HwResult<u64> {
     let mut output = DISK_GEOMETRY_EX::default();
     let mut bytes_returned = 0u32;
@@ -196,6 +254,7 @@ fn query_drive_geometry_size(handle: HANDLE) -> HwResult<u64> {
     Ok(output.DiskSize.max(0) as u64)
 }
 
+#[cfg(windows)]
 fn read_descriptor_string<F>(descriptor_bytes: &[u8], offset: F) -> String
 where
     F: FnOnce(&STORAGE_DEVICE_DESCRIPTOR) -> u32,
@@ -224,6 +283,7 @@ where
     String::from_utf8_lossy(&value[..end]).trim().to_string()
 }
 
+#[cfg(windows)]
 pub fn get_logical_storage() -> HwResult<Vec<DiskInfo>> {
     let mut buffer: [u16; 256] = [0; 256];
     let _ = unsafe { GetLogicalDriveStringsW(Some(&mut buffer)) as usize };
@@ -275,10 +335,12 @@ pub fn get_logical_storage() -> HwResult<Vec<DiskInfo>> {
     Ok(disk_info_list)
 }
 
+#[cfg(windows)]
 fn wide_null(value: &str) -> Vec<u16> {
     OsStr::new(value).encode_wide().chain(Some(0)).collect()
 }
 
+#[cfg(windows)]
 fn is_not_found_message(message: &str) -> bool {
     let lower = message.to_lowercase();
     lower.contains("cannot find")
@@ -287,8 +349,10 @@ fn is_not_found_message(message: &str) -> bool {
         || lower.contains("не найден")
 }
 
+#[cfg(windows)]
 struct OwnedHandle(HANDLE);
 
+#[cfg(windows)]
 impl Drop for OwnedHandle {
     fn drop(&mut self) {
         let _ = unsafe { CloseHandle(self.0) };
