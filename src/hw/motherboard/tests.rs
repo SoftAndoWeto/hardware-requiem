@@ -1,7 +1,6 @@
-use super::*;
+use super::parser::parse_motherboard_info_from_smbios;
 
 #[test]
-#[cfg(any(windows, target_os = "linux"))]
 fn parses_motherboard_from_smbios_baseboard() {
     let mut table = Vec::new();
     table.extend_from_slice(&[
