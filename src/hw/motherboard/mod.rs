@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use super::{
-    smbios::{parse_smbios_structures, read_raw_smbios_table, smbios_table_bytes},
-    HwResult,
-};
+use super::HwResult;
+
+#[cfg(any(windows, target_os = "linux"))]
+use super::smbios::{parse_smbios_structures, read_raw_smbios_table, smbios_table_bytes};
 
 /// Represents information about the motherboard.
 ///
@@ -33,18 +33,18 @@ pub struct MotherboardInfo {
 }
 
 /// Retrieves motherboard information from SMBIOS type 2 Baseboard Information.
-#[cfg(target_os = "windows")]
+#[cfg(any(windows, target_os = "linux"))]
 pub fn get_motherboard_info() -> HwResult<MotherboardInfo> {
     let smbios = read_raw_smbios_table()?;
     parse_motherboard_info_from_smbios(&smbios)
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn get_motherboard_info() -> HwResult<MotherboardInfo> {
-    Err("motherboard collection is only implemented on Windows".to_string())
+    Err("motherboard collection is not implemented for this platform".to_string())
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(windows, target_os = "linux"))]
 fn parse_motherboard_info_from_smbios(raw_smbios: &[u8]) -> HwResult<MotherboardInfo> {
     let table = smbios_table_bytes(raw_smbios)?;
     let structures = parse_smbios_structures(table);
@@ -105,7 +105,7 @@ fn parse_motherboard_info_from_smbios(raw_smbios: &[u8]) -> HwResult<Motherboard
     })
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(windows, target_os = "linux"))]
 fn baseboard_type_description(value: u8) -> Option<String> {
     let description = match value {
         0x01 => "Unknown",
@@ -127,7 +127,7 @@ fn baseboard_type_description(value: u8) -> Option<String> {
     Some(description.to_string())
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(windows, target_os = "linux"))]
 fn baseboard_feature_flags(value: u8) -> Vec<String> {
     [
         (0x01, "Hosting Board"),
@@ -147,7 +147,7 @@ fn baseboard_feature_flags(value: u8) -> Vec<String> {
     .collect()
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(windows, target_os = "linux"))]
 fn memory_device_is_installed(structure: &super::smbios::SmbiosStructure) -> bool {
     match structure.formatted_word(12) {
         Some(0) | Some(0xffff) | None => false,
