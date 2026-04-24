@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-04-24
+
+### Added
+
+- Linux support for storage info (via `/sys/block/`, physical disks filtered by presence of `device/` subdirectory)
+
+### Changed
+
+- Storage module split into `windows.rs`, `linux.rs`
+- `HardWareInfo.storage` field always present (was Windows-only)
+
 ## [0.11.0] - 2026-04-24
 
 ### Added
