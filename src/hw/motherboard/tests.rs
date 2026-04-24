@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-#[cfg(target_os = "windows")]
+#[cfg(any(windows, target_os = "linux"))]
 fn parses_motherboard_from_smbios_baseboard() {
     let mut table = Vec::new();
     table.extend_from_slice(&[
@@ -33,9 +33,16 @@ fn parses_motherboard_from_smbios_baseboard() {
     ]);
     table.extend_from_slice(b"LGA1700\0Intel\0\0");
 
-    let mut raw_smbios = vec![0, 3, 4, 0];
-    raw_smbios.extend_from_slice(&(table.len() as u32).to_le_bytes());
-    raw_smbios.extend_from_slice(&table);
+    #[cfg(windows)]
+    let raw_smbios = {
+        let mut raw = vec![0, 3, 4, 0];
+        raw.extend_from_slice(&(table.len() as u32).to_le_bytes());
+        raw.extend_from_slice(&table);
+        raw
+    };
+
+    #[cfg(target_os = "linux")]
+    let raw_smbios = table.clone();
 
     let motherboard = parse_motherboard_info_from_smbios(&raw_smbios).unwrap();
 
