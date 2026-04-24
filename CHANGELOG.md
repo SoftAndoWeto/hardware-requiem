@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-04-24
+
+### Added
+
+- Linux support for display info (via `/sys/class/drm/card*-*/edid` for connected connectors)
+
+### Changed
+
+- Display module split into `edid.rs`, `windows.rs`, `linux.rs`
+- `HardWareInfo.display` field always present on Windows and Linux (was Windows-only)
+
+## [0.13.0] - 2026-04-24
+
+### Added
+
+- Linux support for GPU info (via `/sys/class/drm/` + optional NVML enrichment)
+
+### Changed
+
+- GPU module split into `nvml.rs`, `windows.rs`, `linux.rs`
+
 ## [0.12.0] - 2026-04-24
 
 ### Added
