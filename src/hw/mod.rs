@@ -12,7 +12,6 @@ pub mod gpu;
 pub mod memory;
 pub mod motherboard;
 mod smbios;
-#[cfg(windows)]
 pub mod storage;
 
 use serde::{Deserialize, Serialize};
@@ -24,7 +23,7 @@ pub use display::{get_display, DisplayInfo};
 pub use gpu::{get_gpu, GpuInfo};
 pub use memory::{get_memory_info, MemoryInfo};
 pub use motherboard::{get_motherboard_info, MotherboardInfo};
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub use storage::{get_storage, DiskInfo};
 
 pub type HwResult<T> = std::result::Result<T, String>;
@@ -35,7 +34,6 @@ pub struct HardWareInfo {
     pub motherboard: Option<MotherboardInfo>,
     pub cpu: Option<CpuInfo>,
     pub memory: Vec<MemoryInfo>,
-    #[cfg(windows)]
     pub storage: Vec<DiskInfo>,
     pub gpu: Vec<GpuInfo>,
     #[cfg(windows)]
@@ -56,7 +54,7 @@ pub fn get_hw_info() -> HardWareInfo {
     let motherboard = collect_optional("motherboard", get_motherboard_info(), &mut errors);
     let cpu = collect_optional("cpu", get_cpu_info(), &mut errors);
     let memory = collect_list("memory", get_memory_info(), &mut errors);
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     let storage = collect_list("storage", get_storage(), &mut errors);
     let gpu = collect_list("gpu", get_gpu(), &mut errors);
     #[cfg(windows)]
@@ -67,7 +65,7 @@ pub fn get_hw_info() -> HardWareInfo {
         motherboard,
         cpu,
         memory,
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         storage,
         gpu,
         #[cfg(windows)]

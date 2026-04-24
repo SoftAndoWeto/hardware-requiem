@@ -1,6 +1,15 @@
-use super::*;
+#[cfg(windows)]
+use std::mem::size_of;
+#[cfg(windows)]
+use windows::Win32::System::Ioctl::STORAGE_DEVICE_DESCRIPTOR;
+
+#[cfg(windows)]
+use super::windows::{is_not_found_message, read_descriptor_string, wide_null};
+#[cfg(target_os = "linux")]
+use super::linux::sectors_to_bytes;
 
 #[test]
+#[cfg(windows)]
 fn reads_descriptor_string_from_valid_offset() {
     let descriptor = descriptor_bytes(&[(64, b"Samsung SSD 990 PRO 1TB\0")], |descriptor| {
         descriptor.ProductIdOffset = 64;
@@ -13,6 +22,7 @@ fn reads_descriptor_string_from_valid_offset() {
 }
 
 #[test]
+#[cfg(windows)]
 fn trims_descriptor_string_whitespace() {
     let descriptor = descriptor_bytes(&[(64, b"  S6Z2NJ0W123456A  \0")], |descriptor| {
         descriptor.SerialNumberOffset = 64;
@@ -25,6 +35,7 @@ fn trims_descriptor_string_whitespace() {
 }
 
 #[test]
+#[cfg(windows)]
 fn reads_descriptor_string_until_buffer_end_when_missing_null_terminator() {
     let descriptor = descriptor_bytes(&[(64, b"ST2000DM005-2U9102")], |descriptor| {
         descriptor.ProductIdOffset = 64;
@@ -37,6 +48,7 @@ fn reads_descriptor_string_until_buffer_end_when_missing_null_terminator() {
 }
 
 #[test]
+#[cfg(windows)]
 fn returns_empty_descriptor_string_for_short_descriptor() {
     assert_eq!(
         read_descriptor_string(&[0; 4], |descriptor| descriptor.ProductIdOffset),
@@ -45,6 +57,7 @@ fn returns_empty_descriptor_string_for_short_descriptor() {
 }
 
 #[test]
+#[cfg(windows)]
 fn returns_empty_descriptor_string_for_zero_offset() {
     let descriptor = descriptor_bytes(&[(64, b"ignored\0")], |descriptor| {
         descriptor.ProductIdOffset = 0;
@@ -57,6 +70,7 @@ fn returns_empty_descriptor_string_for_zero_offset() {
 }
 
 #[test]
+#[cfg(windows)]
 fn returns_empty_descriptor_string_for_out_of_bounds_offset() {
     let descriptor = descriptor_bytes(&[(64, b"ignored\0")], |descriptor| {
         descriptor.ProductIdOffset = 512;
@@ -69,6 +83,7 @@ fn returns_empty_descriptor_string_for_out_of_bounds_offset() {
 }
 
 #[test]
+#[cfg(windows)]
 fn builds_null_terminated_utf16_paths() {
     assert_eq!(
         wide_null(r"\\.\PhysicalDrive0"),
@@ -80,6 +95,7 @@ fn builds_null_terminated_utf16_paths() {
 }
 
 #[test]
+#[cfg(windows)]
 fn recognizes_not_found_messages() {
     assert!(is_not_found_message(
         "The system cannot find the file specified."
@@ -90,6 +106,7 @@ fn recognizes_not_found_messages() {
     assert!(!is_not_found_message("Access is denied."));
 }
 
+#[cfg(windows)]
 fn descriptor_bytes<F>(strings: &[(usize, &[u8])], configure: F) -> Vec<u8>
 where
     F: FnOnce(&mut STORAGE_DEVICE_DESCRIPTOR),
@@ -116,4 +133,16 @@ where
     }
 
     bytes
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn converts_sectors_to_bytes() {
+    assert_eq!(sectors_to_bytes(1953525168), 1_000_204_886_016);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn converts_sectors_to_bytes_saturates_on_overflow() {
+    assert_eq!(sectors_to_bytes(u64::MAX), u64::MAX);
 }
