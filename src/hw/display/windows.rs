@@ -1,8 +1,17 @@
+//! Windows display collection via GDI and registry EDID.
+//!
+//! Active monitors are enumerated with `EnumDisplayDevicesW`. EDID blobs are
+//! read from `HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY` and matched to
+//! monitors by hardware ID. Monitors without a registry EDID entry are still
+//! included, just without the EDID-derived fields.
+
 use std::mem::size_of;
 
 use super::edid::{bytes_to_hex, edid_display_name, parse_edid_info};
 use super::{DisplayInfo, HwResult};
 
+/// An entry from the registry with its raw EDID and the hardware ID used to
+/// match it against the GDI monitor list.
 #[derive(Debug)]
 struct EdidDisplay {
     hardware_id: String,
@@ -10,6 +19,8 @@ struct EdidDisplay {
     edid: Vec<u8>,
 }
 
+/// A monitor as reported by `EnumDisplayDevicesW`, with current display
+/// settings attached if the mode query succeeded.
 #[derive(Debug, Clone)]
 struct ActiveMonitor {
     hardware_id: Option<String>,
@@ -182,6 +193,9 @@ fn display_settings(adapter_device_name: &str) -> Option<DisplaySettings> {
     })
 }
 
+/// Merges registry EDID entries with GDI active monitors by hardware ID.
+/// Monitors present in GDI but missing from the registry are appended without
+/// EDID fields.
 fn collect_edid_displays(active_monitors: &[ActiveMonitor]) -> HwResult<Vec<DisplayInfo>> {
     let mut displays = Vec::new();
 
@@ -251,6 +265,8 @@ fn collect_edid_displays(active_monitors: &[ActiveMonitor]) -> HwResult<Vec<Disp
     Ok(displays)
 }
 
+/// Walks `HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY` and collects all entries
+/// that have a valid `EDID` binary value of at least 128 bytes.
 fn enumerate_edid_displays() -> HwResult<Vec<EdidDisplay>> {
     let display_key = RegKey::open_local_machine("SYSTEM\\CurrentControlSet\\Enum\\DISPLAY")?;
     let mut displays = Vec::new();
@@ -286,6 +302,7 @@ fn enumerate_edid_displays() -> HwResult<Vec<EdidDisplay>> {
     Ok(displays)
 }
 
+/// RAII wrapper around a Windows registry key handle.
 struct RegKey(windows::Win32::System::Registry::HKEY);
 
 impl RegKey {
@@ -433,6 +450,11 @@ impl Drop for RegKey {
     }
 }
 
+/// Extracts the hardware ID (e.g. `"SAM71E7"`) from a Windows device ID string.
+///
+/// Handles two common formats:
+/// - `\\?\DISPLAY#SAM71E7#...` — device interface path
+/// - `MONITOR\SAM71E7\...` — device instance path
 pub(super) fn monitor_hardware_id(device_id: &str) -> Option<String> {
     if let Some((_, rest)) = device_id.split_once("DISPLAY#") {
         return rest.split('#').next().map(str::to_string);

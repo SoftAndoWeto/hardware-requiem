@@ -1,3 +1,11 @@
+//! Pure EDID parsing, no platform dependencies.
+//!
+//! EDID (Extended Display Identification Data) is a 128-byte binary structure
+//! that monitors expose to the host. The base block contains manufacturer info,
+//! physical dimensions, and up to four 18-byte descriptor blocks. Descriptor
+//! tag `0xFC` holds the monitor name as ASCII.
+
+/// Parsed fields from the EDID base block (first 128 bytes).
 #[derive(Debug, Default)]
 pub(super) struct EdidInfo {
     pub vendor: Option<String>,
@@ -11,6 +19,8 @@ pub(super) struct EdidInfo {
     pub diagonal_inches: Option<f32>,
 }
 
+/// Scans the four 18-byte descriptor blocks (bytes 54–125) for the monitor
+/// name descriptor (tag `0xFC`) and returns its content as a trimmed string.
 pub(super) fn edid_display_name(edid: &[u8]) -> Option<String> {
     for descriptor in edid.get(54..126)?.chunks_exact(18) {
         if descriptor[0..3] == [0, 0, 0] && descriptor[3] == 0xfc {
@@ -33,6 +43,8 @@ pub(super) fn edid_display_name(edid: &[u8]) -> Option<String> {
     None
 }
 
+/// Parses manufacturer info and physical properties from the EDID base block.
+/// Returns a default `EdidInfo` if `edid` is shorter than 128 bytes.
 pub(super) fn parse_edid_info(edid: &[u8]) -> EdidInfo {
     let Some(header) = edid.get(0..128) else {
         return EdidInfo::default();
@@ -69,6 +81,10 @@ pub(super) fn parse_edid_info(edid: &[u8]) -> EdidInfo {
     }
 }
 
+/// Decodes the 3-letter manufacturer ID from EDID bytes 8–9.
+///
+/// The two bytes pack three 5-bit values (A=1…Z=26) into a big-endian `u16`.
+/// Returns `None` if any character falls outside the valid A–Z range.
 pub(super) fn edid_manufacturer_id(edid: &[u8]) -> Option<String> {
     let value = u16::from_be_bytes([*edid.get(8)?, *edid.get(9)?]);
     let mut manufacturer = String::with_capacity(3);
@@ -84,6 +100,8 @@ pub(super) fn edid_manufacturer_id(edid: &[u8]) -> Option<String> {
     Some(manufacturer)
 }
 
+/// Maps known 3-letter manufacturer IDs to full brand names.
+/// Returns `None` for IDs not in the table.
 pub(super) fn edid_vendor_name(manufacturer_id: &str) -> Option<&'static str> {
     match manufacturer_id {
         "SAM" => Some("Samsung"),

@@ -1,3 +1,9 @@
+//! Linux display collection via DRM sysfs.
+//!
+//! Each entry under `/sys/class/drm/` is either a GPU card node (`card0`) or a
+//! connector node (`card0-DP-1`, `card2-HDMI-A-1`). Only connectors with
+//! `status == "connected"` and a valid `edid` file are collected.
+
 use super::edid::{bytes_to_hex, edid_display_name, parse_edid_info};
 use super::{DisplayInfo, HwResult};
 
@@ -17,6 +23,9 @@ pub fn get_display() -> HwResult<Vec<DisplayInfo>> {
     Ok(displays)
 }
 
+/// Returns `true` if `name` is a DRM connector entry like `card0-DP-1` or
+/// `card2-HDMI-A-1`, as opposed to a GPU card node (`card0`) or render node
+/// (`renderD128`).
 pub(super) fn is_drm_connector(name: &str) -> bool {
     let Some(rest) = name.strip_prefix("card") else {
         return false;
