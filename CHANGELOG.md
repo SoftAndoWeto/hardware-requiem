@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-04-24
+
+### Added
+
+- Linux support for motherboard info (via SMBIOS `/sys/firmware/dmi/tables/DMI`)
+
+### Changed
+
+- Motherboard module split into `parser.rs`, `windows.rs`, `linux.rs`
+
 ## [0.9.0] - 2026-04-22
 
 ### Added
