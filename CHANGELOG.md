@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-24
+
+### Added
+
+- Linux support for CPU info (via `/proc/cpuinfo` and `/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq`)
+
+### Changed
+
+- CPU module split into `windows.rs`, `linux.rs`; shared helpers remain in `mod.rs`
+
 ## [0.10.0] - 2026-04-24
 
 ### Added
