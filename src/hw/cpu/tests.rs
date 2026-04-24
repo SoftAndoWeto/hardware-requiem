@@ -1,5 +1,8 @@
 use super::*;
 
+#[cfg(target_os = "linux")]
+use super::linux::parse_cpu_info_from_procfs_with_freq;
+
 #[test]
 fn normalizes_cpu_brand_by_trimming_whitespace() {
     let raw = "  Intel(R) Core(TM) i7-14700K  ";
